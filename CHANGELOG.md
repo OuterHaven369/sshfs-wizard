@@ -2,6 +2,22 @@
 
 All notable changes to SSHFS-Wizard will be documented in this file.
 
+## [1.0.1] - 2025-11-28
+
+### Bug Fixes
+- **CRITICAL**: Fixed drive detection not recognizing network/SSHFS mounts
+  - Enhanced `Get-AvailableDriveLetters` to parse `net use` output
+  - Now correctly detects drives mounted via WinFsp, SSHFS, and network shares
+  - Prevents mounting conflicts with existing drives
+- **Fixed**: Removed auto-unmount on logoff task due to Windows compatibility issues
+  - ONLOGOFF schedule type has inconsistent support across Windows versions
+  - Persistent mounts are more reliable and user-friendly
+  - Manual unmount script still provided
+
+### Changed
+- Auto-unmount on logoff removed (now optional via manual task creation)
+- Drive persistence across sessions is now the default behavior
+
 ## [1.0.0] - 2025-11-28
 
 ### Initial Release

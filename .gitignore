@@ -21,5 +21,12 @@ run-installer.bat
 TEST-RUN.bat
 QUICK-TEST.bat
 FINAL-TEST.bat
+INSTALL-AUTO.bat
+RUN-INSTALLER-NOW.bat
+# Keep INSTALL.bat - that's the main user-facing installer
 test-manual.ps1
+test-net-use-parsing.ps1
+test-drive-detection.ps1
 *.bak
+DEPLOYMENT.md
+SUMMARY.md

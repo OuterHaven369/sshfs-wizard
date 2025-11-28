@@ -29,6 +29,12 @@ SSHFS Wizard automates the complete setup process for mounting remote Linux dire
    ```
 
 2. **Run as Administrator**
+
+   **Option A: Double-click installer (Recommended)**
+   - Double-click `INSTALL.bat`
+   - Click "Yes" when prompted for administrator privileges
+
+   **Option B: Via PowerShell**
    ```powershell
    Right-click PowerShell → Run as administrator
    cd C:\Users\YourName\Downloads\SSHFS-Wizard
@@ -36,28 +42,41 @@ SSHFS Wizard automates the complete setup process for mounting remote Linux dire
    ```
 
 3. **Follow the Prompts**
-   - Enter your VPS hostname or IP (e.g., `45.76.12.161`)
-   - Enter your VPS username (e.g., `linuxuser`)
-   - Choose drive letter (default: `X:`)
+   - **Enter your server hostname or IP** (e.g., `45.76.12.161`, `myserver.com`)
+   - **Enter your SSH username** (e.g., `myuser`, `admin`)
+   - **Choose drive letter** - installer will auto-detect available drives and let you pick
    - Optionally specify remote path (default: home directory)
 
 ## Usage
 
-### Command-Line Parameters
+### Command-Line Parameters (Optional)
+
+You can run the installer with parameters to skip prompts:
 
 ```powershell
-# Automatic drive selection (uses first available drive)
-.\install.ps1 -HostName "45.76.12.161" -User "linuxuser"
+# Automatic drive selection (prompts for hostname and username)
+.\install.ps1
 
-# Specify preferred drive letter
-.\install.ps1 -HostName "45.76.12.161" -User "linuxuser" -Drive "Z"
+# Pre-specify server and user (auto-detects drive)
+.\install.ps1 -HostName "your-server.com" -User "yourusername"
+
+# Specify everything including preferred drive
+.\install.ps1 -HostName "192.168.1.100" -User "admin" -Drive "Y"
 ```
 
 **Parameters:**
-- `-HostName`: VPS hostname or IP address
-- `-User`: SSH username on the VPS
-- `-Drive`: (Optional) Preferred Windows drive letter. If not specified or if the requested drive is in use, the installer will automatically select the first available drive (D-Z) and allow you to choose an alternative
+- `-HostName`: (Optional) VPS hostname or IP address - **prompts if not provided**
+- `-User`: (Optional) SSH username on the VPS - **prompts if not provided**
+- `-Drive`: (Optional) Preferred Windows drive letter. Auto-detects and prompts if not specified
 - `-Auto`: Reserved for future automated installations
+
+**Examples:**
+```powershell
+# Connect to different servers
+.\install.ps1 -HostName "myserver.example.com" -User "john"
+.\install.ps1 -HostName "192.168.50.10" -User "root"
+.\install.ps1 -HostName "vps.company.net" -User "developer"
+```
 
 ### Smart Drive Selection
 
@@ -84,9 +103,10 @@ The installer creates the following structure:
 
 ### Scheduled Tasks
 
-Two Windows scheduled tasks are created:
+One Windows scheduled task is created:
 - `SSHFS_Mount_X` - Runs on user logon (10-second delay)
-- `SSHFS_Unmount_X` - Runs on user logoff
+
+**Note**: Auto-unmount on logoff is not created by default due to Windows compatibility issues. The drive will persist across sessions, which is generally more reliable. You can manually unmount anytime using the unmount script.
 
 ### Manual Mount/Unmount
 

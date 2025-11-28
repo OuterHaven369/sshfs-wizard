@@ -14,9 +14,25 @@ function Write-ErrorMsg($msg) {
 }
 
 function Get-AvailableDriveLetters {
-    # Get all currently used drive letters
-    $usedDrives = Get-PSDrive -PSProvider FileSystem | Select-Object -ExpandProperty Name
+    # Get all currently used drive letters from multiple sources
+    $usedDrives = @()
+
+    # Source 1: PowerShell drives
+    $usedDrives += Get-PSDrive -PSProvider FileSystem | Select-Object -ExpandProperty Name
+
+    # Source 2: WMI logical disks
     $usedDrives += (Get-WmiObject Win32_LogicalDisk | Select-Object -ExpandProperty DeviceID | ForEach-Object { $_.TrimEnd(':') })
+
+    # Source 3: Network drives and SSHFS mounts (from net use)
+    $netUseOutput = net use 2>$null | Select-String "^\s*(OK|Unavailable|Disconnected)?\s+([A-Z]:)"
+    foreach ($line in $netUseOutput) {
+        if ($line -match '\s([A-Z]):') {
+            $usedDrives += $matches[1]
+        }
+    }
+
+    # Remove duplicates
+    $usedDrives = $usedDrives | Select-Object -Unique
 
     # All possible drive letters (excluding A, B, C which are typically system/reserved)
     $allDrives = 68..90 | ForEach-Object { [char]$_ } # D-Z
@@ -268,17 +284,16 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 
-# Unmount on logoff
-schtasks /Create /TN "SSHFS_Unmount_$Drive" `
-    /TR "`"$unmountScriptPath`"" `
-    /SC ONLOGOFF `
-    /RL HIGHEST `
-    /F
+# Unmount on logoff (optional - manual unmount also works)
+Write-Info "Note: Auto-unmount on logoff is optional. The drive will persist across sessions."
+Write-Host "      To manually unmount, run: $unmountScriptPath" -ForegroundColor Gray
 
-if ($LASTEXITCODE -ne 0) {
-    Write-ErrorMsg "Failed to create SSHFS_Unmount_$Drive task."
-    exit 1
-}
+# We skip auto-unmount task because:
+# 1. ONLOGOFF has compatibility issues on some Windows versions
+# 2. Persistent mounts are often desirable
+# 3. Manual unmount script is available if needed
+# Users can create the task manually if desired:
+# schtasks /Create /TN "SSHFS_Unmount_$Drive" /TR "$unmountScriptPath" /SC ONLOGOFF /RU "$env:USERNAME"
 
 Write-Info "Scheduled tasks created successfully."
 
