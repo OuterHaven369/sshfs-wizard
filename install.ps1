@@ -1,5 +1,5 @@
 param(
-    [string]$Host = "",
+    [string]$HostName = "",
     [string]$User = "",
     [string]$Drive = "X",
     [switch]$Auto
@@ -11,6 +11,61 @@ function Write-Info($msg) {
 
 function Write-ErrorMsg($msg) {
     Write-Host "[!] $msg" -ForegroundColor Red
+}
+
+function Get-AvailableDriveLetters {
+    # Get all currently used drive letters
+    $usedDrives = Get-PSDrive -PSProvider FileSystem | Select-Object -ExpandProperty Name
+    $usedDrives += (Get-WmiObject Win32_LogicalDisk | Select-Object -ExpandProperty DeviceID | ForEach-Object { $_.TrimEnd(':') })
+
+    # All possible drive letters (excluding A, B, C which are typically system/reserved)
+    $allDrives = 68..90 | ForEach-Object { [char]$_ } # D-Z
+
+    # Return drives that are not in use
+    $available = $allDrives | Where-Object { $usedDrives -notcontains $_ }
+    return $available
+}
+
+function Select-DriveLetter {
+    param([string]$PreferredDrive)
+
+    $availableDrives = Get-AvailableDriveLetters
+
+    if ($availableDrives.Count -eq 0) {
+        Write-ErrorMsg "No available drive letters! All drives D-Z are in use."
+        exit 1
+    }
+
+    # If a preferred drive was specified
+    if ($PreferredDrive) {
+        $PreferredDrive = $PreferredDrive.TrimEnd(':').ToUpper()
+        if ($availableDrives -contains $PreferredDrive) {
+            Write-Info "Using specified drive letter: $PreferredDrive"
+            return $PreferredDrive
+        } else {
+            Write-Host "[!] Drive $PreferredDrive`: is already in use or invalid." -ForegroundColor Yellow
+            Write-Host "    Available drives: $($availableDrives -join ', ')" -ForegroundColor Yellow
+        }
+    }
+
+    # Auto-select first available
+    $autoDrive = $availableDrives[0]
+    Write-Info "Auto-selected drive: $autoDrive (first available)"
+    Write-Host "    Available drives: $($availableDrives -join ', ')" -ForegroundColor Gray
+    Write-Host "    Press ENTER to use $autoDrive, or type a different letter: " -NoNewline -ForegroundColor Cyan
+
+    $choice = Read-Host
+    if ($choice) {
+        $choice = $choice.TrimEnd(':').ToUpper()
+        if ($availableDrives -contains $choice) {
+            return $choice
+        } else {
+            Write-Host "[!] Invalid choice. Using auto-selected $autoDrive" -ForegroundColor Yellow
+            return $autoDrive
+        }
+    }
+
+    return $autoDrive
 }
 
 # Ensure running as administrator
@@ -53,16 +108,15 @@ Ensure-Package -Id "WinFsp.WinFsp" -FriendlyName "WinFsp"
 Ensure-Package -Id "SSHFS-Win.SSHFS-Win" -FriendlyName "SSHFS-Win"
 
 # 2) Collect connection info
-if (-not $Host) {
-    $Host = Read-Host "Enter VPS hostname or IP (e.g. 45.76.12.161)"
+if (-not $HostName) {
+    $HostName = Read-Host "Enter VPS hostname or IP (e.g. 45.76.12.161)"
 }
 if (-not $User) {
     $User = Read-Host "Enter VPS username (e.g. linuxuser)"
 }
-if (-not $Drive) {
-    $Drive = "X"
-}
-$Drive = $Drive.TrimEnd(':').ToUpper()
+
+# Smart drive letter selection
+$Drive = Select-DriveLetter -PreferredDrive $Drive
 
 # Optional: remote path (currently not used; home directory is default)
 $RemotePath = Read-Host "Enter remote path to mount (default: home directory). Press ENTER to use default"
@@ -71,7 +125,7 @@ if (-not $RemotePath) {
 }
 
 Write-Info "Using:"
-Write-Host "  Host       : $Host"
+Write-Host "  Host       : $HostName"
 Write-Host "  User       : $User"
 Write-Host "  Drive      : $Drive`:"
 if ($RemotePath) {
@@ -102,8 +156,8 @@ if (-not (Test-Path $keyFile)) {
 }
 
 # 4) Test passwordless SSH; if it fails, try to add key to authorized_keys
-Write-Info "Testing passwordless SSH to $User@$Host..."
-ssh "$User@$Host" "echo ok" 2>$null | Out-Null
+Write-Info "Testing passwordless SSH to $User@$HostName..."
+ssh "$User@$HostName" "echo ok" 2>$null | Out-Null
 $sshOk = ($LASTEXITCODE -eq 0)
 
 if (-not $sshOk) {
@@ -118,14 +172,14 @@ if (-not $sshOk) {
     Write-Info "You may be prompted for the VPS password."
     $cmd = "mkdir -p ~/.ssh && chmod 700 ~/.ssh && echo '$pubKey' >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys"
     # Use SSH with bash -lc to avoid shell differences
-    ssh "$User@$Host" "$cmd"
+    ssh "$User@$HostName" "$cmd"
     if ($LASTEXITCODE -ne 0) {
         Write-ErrorMsg "Failed to upload SSH key to server. Please configure authorized_keys manually and re-run."
         exit 1
     }
 
     Write-Info "Re-testing passwordless SSH..."
-    ssh "$User@$Host" "echo ok" 2>$null | Out-Null
+    ssh "$User@$HostName" "echo ok" 2>$null | Out-Null
     if ($LASTEXITCODE -ne 0) {
         Write-ErrorMsg "Passwordless SSH still not working. Aborting."
         exit 1
@@ -142,7 +196,7 @@ if (-not (Test-Path $logsDir)) { New-Item -ItemType Directory -Path $logsDir | O
 
 # Save config
 $config = @{
-    Host       = $Host
+    Host       = $HostName
     User       = $User
     Drive      = $Drive
     RemotePath = $RemotePath
@@ -156,7 +210,7 @@ Write-Info "Saved configuration to $configPath"
 $reconnectScriptPath = Join-Path $baseDir "sshfs_reconnect.cmd"
 $logPath = Join-Path $logsDir "mount.log"
 
-$remotePrefix = "\\sshfs.k\\$User@$Host"
+$remotePrefix = "\\sshfs.k\\$User@$HostName"
 # Note: for now we always mount the user's home directory (Option A)
 
 $reconnectScript = @"
@@ -164,7 +218,7 @@ $reconnectScript = @"
 set LOG="$logPath"
 echo [%date% %time%] Starting SSHFS reconnect... >> "%LOG%"
 :retry
-ping $Host -n 1 -w 1000 >nul
+ping $HostName -n 1 -w 1000 >nul
 if errorlevel 1 (
     echo [%date% %time%] Host unreachable, retrying... >> "%LOG%"
     timeout /t 3 >nul

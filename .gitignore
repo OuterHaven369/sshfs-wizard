@@ -9,6 +9,17 @@ Desktop.ini
 # Archives
 *.zip
 
-# Test outputs
+# Test outputs and scripts
 test-*.log
+test-*.txt
+*-output.log
+manual-test.log
+install-output.log
+check-installation.ps1
+run-test.ps1
+run-installer.bat
+TEST-RUN.bat
+QUICK-TEST.bat
+FINAL-TEST.bat
+test-manual.ps1
 *.bak

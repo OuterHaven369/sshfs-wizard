@@ -46,14 +46,27 @@ SSHFS Wizard automates the complete setup process for mounting remote Linux dire
 ### Command-Line Parameters
 
 ```powershell
-.\install.ps1 -Host "45.76.12.161" -User "linuxuser" -Drive "Z"
+# Automatic drive selection (uses first available drive)
+.\install.ps1 -HostName "45.76.12.161" -User "linuxuser"
+
+# Specify preferred drive letter
+.\install.ps1 -HostName "45.76.12.161" -User "linuxuser" -Drive "Z"
 ```
 
 **Parameters:**
-- `-Host`: VPS hostname or IP address
+- `-HostName`: VPS hostname or IP address
 - `-User`: SSH username on the VPS
-- `-Drive`: Windows drive letter to use (default: X)
+- `-Drive`: (Optional) Preferred Windows drive letter. If not specified or if the requested drive is in use, the installer will automatically select the first available drive (D-Z) and allow you to choose an alternative
 - `-Auto`: Reserved for future automated installations
+
+### Smart Drive Selection
+
+The installer automatically:
+- Detects all available drive letters (D-Z)
+- Auto-selects the first available drive if none specified
+- Warns you if your preferred drive is in use and shows alternatives
+- Allows you to choose a different drive during installation
+- Never overwrites existing drive mappings
 
 ### What Gets Installed
 
