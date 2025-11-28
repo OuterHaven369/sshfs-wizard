@@ -1,0 +1,14 @@
+# Temporary extraction directories
+temp-*/
+
+# Windows
+Thumbs.db
+Desktop.ini
+*.lnk
+
+# Archives
+*.zip
+
+# Test outputs
+test-*.log
+*.bak
