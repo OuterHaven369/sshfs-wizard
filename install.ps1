@@ -148,9 +148,16 @@ $script:AutoSelectDrive = $AutoMode -or (-not $wasInteractive -and $HostName -an
 $Drive = Select-DriveLetter -PreferredDrive $Drive
 
 # Optional: remote path (currently not used; home directory is default)
-$RemotePath = Read-Host "Enter remote path to mount (default: home directory). Press ENTER to use default"
-if (-not $RemotePath) {
+if ($script:AutoSelectDrive) {
+    # Auto-mode: use default (home directory)
     $RemotePath = ""
+    Write-Info "Auto-mode: using default remote path (home directory)"
+} else {
+    # Interactive mode: ask user
+    $RemotePath = Read-Host "Enter remote path to mount (default: home directory). Press ENTER to use default"
+    if (-not $RemotePath) {
+        $RemotePath = ""
+    }
 }
 
 Write-Info "Using:"
