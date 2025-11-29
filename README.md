@@ -68,17 +68,17 @@ You can run the installer with parameters to skip prompts:
 - `-HostName`: (Optional) VPS hostname or IP address - **prompts if not provided**
 - `-User`: (Optional) SSH username on the VPS - **prompts if not provided**
 - `-Drive`: (Optional) Preferred Windows drive letter. Auto-detects if not specified
-- `-NonInteractive`: (Optional) Skip all prompts, auto-select first available drive. **Perfect for AI/automation**
+- `-Interactive`: (Optional) Enable wizard mode with prompts. **Default is automated (no prompts)**
 
 **Examples:**
 ```powershell
-# Interactive mode - prompts for drive selection
-.\install.ps1 -HostName "myserver.example.com" -User "john"
+# Default: Automated mode - no drive prompts (perfect for AI/scripts)
+.\install.ps1 -HostName "192.168.50.10" -User "admin"
 
-# Non-interactive mode - perfect for AI/automation (no prompts)
-.\install.ps1 -HostName "192.168.50.10" -User "admin" -NonInteractive
+# Wizard mode - interactive prompts for drive selection
+.\install.ps1 -HostName "myserver.example.com" -User "john" -Interactive
 
-# Specify exact drive (skips auto-detection)
+# Specify exact drive (skips auto-detection entirely)
 .\install.ps1 -HostName "vps.company.net" -User "developer" -Drive "Y"
 ```
 
