@@ -261,7 +261,7 @@ if errorlevel 1 (
     goto retry
 )
 echo [%date% %time%] Host reachable, mounting... >> "%LOG%"
-sshfs-win.exe svc $remotePrefix ${Drive}: -o IdentityFile="%USERPROFILE%\.ssh\id_ed25519"
+sshfs-win.exe svc $remotePrefix ${Drive}:
 echo [%date% %time%] Mount command issued. >> "%LOG%"
 exit
 "@
