@@ -2,7 +2,7 @@ param(
     [string]$HostName = "",
     [string]$User = "",
     [string]$Drive = "",
-    [switch]$Interactive
+    [switch]$AutoMode
 )
 
 function Write-Info($msg) {
@@ -69,9 +69,9 @@ function Select-DriveLetter {
     Write-Info "Auto-selected drive: $autoDrive (first available)"
     Write-Host "    Available drives: $($availableDrives -join ', ')" -ForegroundColor Gray
 
-    # Check if running in interactive mode (wizard)
-    if (-not $script:Interactive) {
-        Write-Info "Auto-mode: using $autoDrive"
+    # If running in auto-mode (AI/automation), don't prompt
+    if ($script:AutoSelectDrive) {
+        Write-Info "Auto-mode: using $autoDrive (no user prompt)"
         return $autoDrive
     }
 
@@ -131,15 +131,20 @@ Ensure-Package -Id "WinFsp.WinFsp" -FriendlyName "WinFsp"
 Ensure-Package -Id "SSHFS-Win.SSHFS-Win" -FriendlyName "SSHFS-Win"
 
 # 2) Collect connection info
+$wasInteractive = $false
 if (-not $HostName) {
     $HostName = Read-Host "Enter VPS hostname or IP (e.g. 45.76.12.161)"
+    $wasInteractive = $true
 }
 if (-not $User) {
     $User = Read-Host "Enter VPS username (e.g. linuxuser)"
+    $wasInteractive = $true
 }
 
+# Determine if we should auto-select drive (AI mode) or prompt (user mode)
+$script:AutoSelectDrive = $AutoMode -or (-not $wasInteractive -and $HostName -and $User)
+
 # Smart drive letter selection
-$script:Interactive = $Interactive  # Make available to function
 $Drive = Select-DriveLetter -PreferredDrive $Drive
 
 # Optional: remote path (currently not used; home directory is default)
