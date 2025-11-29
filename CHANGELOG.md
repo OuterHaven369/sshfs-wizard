@@ -2,6 +2,20 @@
 
 All notable changes to SSHFS-Wizard will be documented in this file.
 
+## [1.0.3] - 2025-11-28
+
+### Fixed - CRITICAL
+- **Mount command now uses correct UNC path syntax**
+  - Changed from double backslash (`\\sshfs.k\\`) to single backslash (`\sshfs.k\`)
+  - This was preventing drives from mounting correctly in Windows File Explorer
+  - Fixes "Cannot create WinFsp-FUSE file system" error
+  - Drive now properly appears and is accessible in File Explorer
+
+### Technical Details
+- sshfs-win.exe requires single backslash in UNC paths per WinFsp documentation
+- Previous double backslash syntax caused WinFsp service initialization failures
+- Verified working with live VPS connection test
+
 ## [1.0.2] - 2025-11-28
 
 ### Changed - BREAKING

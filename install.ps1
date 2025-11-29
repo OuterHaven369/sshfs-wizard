@@ -246,8 +246,8 @@ Write-Info "Saved configuration to $configPath"
 $reconnectScriptPath = Join-Path $baseDir "sshfs_reconnect.cmd"
 $logPath = Join-Path $logsDir "mount.log"
 
-$remotePrefix = "\\sshfs.k\\$User@$HostName"
-# Note: for now we always mount the user's home directory (Option A)
+$remotePrefix = "\sshfs.k\$User@$HostName"
+# Note: sshfs-win requires single backslash (not double) in UNC path
 
 $reconnectScript = @"
 @echo off
