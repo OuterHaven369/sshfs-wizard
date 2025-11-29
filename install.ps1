@@ -1,8 +1,8 @@
 param(
     [string]$HostName = "",
     [string]$User = "",
-    [string]$Drive = "X",
-    [switch]$Auto
+    [string]$Drive = "",
+    [switch]$NonInteractive
 )
 
 function Write-Info($msg) {
@@ -68,6 +68,13 @@ function Select-DriveLetter {
     $autoDrive = $availableDrives[0]
     Write-Info "Auto-selected drive: $autoDrive (first available)"
     Write-Host "    Available drives: $($availableDrives -join ', ')" -ForegroundColor Gray
+
+    # Check if running in non-interactive mode
+    if ($script:NonInteractive) {
+        Write-Info "Non-interactive mode: using $autoDrive"
+        return $autoDrive
+    }
+
     Write-Host "    Press ENTER to use $autoDrive, or type a different letter: " -NoNewline -ForegroundColor Cyan
 
     $choice = Read-Host
@@ -132,7 +139,12 @@ if (-not $User) {
 }
 
 # Smart drive letter selection
-$Drive = Select-DriveLetter -PreferredDrive $Drive
+if ($NonInteractive) {
+    $Drive = Select-DriveLetter -PreferredDrive $Drive
+    $script:NonInteractive = $true  # Make available to function
+} else {
+    $Drive = Select-DriveLetter -PreferredDrive $Drive
+}
 
 # Optional: remote path (currently not used; home directory is default)
 $RemotePath = Read-Host "Enter remote path to mount (default: home directory). Press ENTER to use default"

@@ -2,6 +2,24 @@
 
 All notable changes to SSHFS-Wizard will be documented in this file.
 
+## [1.0.2] - 2025-11-28
+
+### Added
+- **NonInteractive mode** for AI agents and automation
+  - New `-NonInteractive` flag skips all prompts
+  - Auto-selects first available drive without user input
+  - Perfect for unattended installations and AI automation
+
+### Changed
+- Default `-Drive` parameter changed from "X" to empty string (auto-detect)
+- Removed deprecated `-Auto` parameter (replaced with `-NonInteractive`)
+
+### Use Case
+```powershell
+# AI can now run fully automated
+.\install.ps1 -HostName "server.com" -User "admin" -NonInteractive
+```
+
 ## [1.0.1] - 2025-11-28
 
 ### Bug Fixes
