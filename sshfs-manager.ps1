@@ -332,6 +332,7 @@ $xaml = @"
 
         <WrapPanel Grid.Row="2" Margin="0,12,0,0">
             <Button Name="BtnAdd" Content="+ Add"/>
+            <Button Name="BtnEdit" Content="Edit" Background="#744DA9"/>
             <Button Name="BtnRemove" Content="Remove" Background="#C42B1C"/>
             <Button Name="BtnConnect" Content="Connect" Background="#107C10"/>
             <Button Name="BtnDisconnect" Content="Disconnect" Background="#5C5C5C"/>
@@ -355,6 +356,7 @@ $script:window = [Windows.Markup.XamlReader]::Load($reader)
 # Get controls
 $script:connectionGrid = $script:window.FindName("ConnectionGrid")
 $btnAdd = $script:window.FindName("BtnAdd")
+$btnEdit = $script:window.FindName("BtnEdit")
 $btnRemove = $script:window.FindName("BtnRemove")
 $btnConnect = $script:window.FindName("BtnConnect")
 $btnDisconnect = $script:window.FindName("BtnDisconnect")
@@ -462,6 +464,110 @@ $btnAdd.Add_Click({
 
     $btnCancel.Add_Click({ $addWindow.Close() })
     $addWindow.ShowDialog()
+})
+
+# Edit Connection
+$btnEdit.Add_Click({
+    $selected = $script:connectionGrid.SelectedItem
+    if (-not $selected) {
+        [System.Windows.MessageBox]::Show("Select a connection to edit.", "No Selection", "OK", "Warning")
+        return
+    }
+
+    # Store original name to find and update the connection
+    $originalName = $selected.Name
+
+    $editXaml = @"
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        Title="Edit Connection" Height="340" Width="420"
+        WindowStartupLocation="CenterOwner" Background="#F5F5F5" ResizeMode="NoResize">
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/><RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="100"/><ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+
+        <TextBlock Grid.Row="0" Text="Name:" VerticalAlignment="Center" Margin="0,8"/>
+        <TextBox Grid.Row="0" Grid.Column="1" Name="TxtName" Margin="0,8" Padding="6,4"/>
+
+        <TextBlock Grid.Row="1" Text="Host/IP:" VerticalAlignment="Center" Margin="0,8"/>
+        <TextBox Grid.Row="1" Grid.Column="1" Name="TxtHost" Margin="0,8" Padding="6,4"/>
+
+        <TextBlock Grid.Row="2" Text="Username:" VerticalAlignment="Center" Margin="0,8"/>
+        <TextBox Grid.Row="2" Grid.Column="1" Name="TxtUser" Margin="0,8" Padding="6,4"/>
+
+        <TextBlock Grid.Row="3" Text="Drive:" VerticalAlignment="Center" Margin="0,8"/>
+        <TextBox Grid.Row="3" Grid.Column="1" Name="TxtDrive" Margin="0,8" Padding="6,4" MaxLength="1" Width="50" HorizontalAlignment="Left"/>
+
+        <TextBlock Grid.Row="4" Text="Remote Path:" VerticalAlignment="Center" Margin="0,8"/>
+        <TextBox Grid.Row="4" Grid.Column="1" Name="TxtRemotePath" Margin="0,8" Padding="6,4"/>
+
+        <TextBlock Grid.Row="5" Grid.ColumnSpan="2" Foreground="#666" FontSize="11" Margin="0,10" TextWrapping="Wrap">
+            Leave Remote Path empty to mount user's home directory.
+        </TextBlock>
+
+        <StackPanel Grid.Row="6" Grid.ColumnSpan="2" Orientation="Horizontal" HorizontalAlignment="Right">
+            <Button Name="BtnSave" Content="Save" Width="80" Background="#744DA9" Foreground="White" Padding="8,4" Margin="4"/>
+            <Button Name="BtnCancel" Content="Cancel" Width="80" Background="#5C5C5C" Foreground="White" Padding="8,4" Margin="4"/>
+        </StackPanel>
+    </Grid>
+</Window>
+"@
+
+    $editReader = [System.Xml.XmlReader]::Create([System.IO.StringReader]::new($editXaml))
+    $editWindow = [Windows.Markup.XamlReader]::Load($editReader)
+    $editWindow.Owner = $script:window
+
+    $txtName = $editWindow.FindName("TxtName")
+    $txtHost = $editWindow.FindName("TxtHost")
+    $txtUser = $editWindow.FindName("TxtUser")
+    $txtDrive = $editWindow.FindName("TxtDrive")
+    $txtRemotePath = $editWindow.FindName("TxtRemotePath")
+    $btnSave = $editWindow.FindName("BtnSave")
+    $btnCancel = $editWindow.FindName("BtnCancel")
+
+    # Pre-fill with existing values
+    $txtName.Text = $selected.Name
+    $txtHost.Text = $selected.Host
+    $txtUser.Text = $selected.User
+    $txtDrive.Text = $selected.Drive.TrimEnd(':')
+    $txtRemotePath.Text = if ($selected.RemotePath -eq "(home)") { "" } else { $selected.RemotePath }
+
+    $btnSave.Add_Click({
+        if (-not $txtName.Text -or -not $txtHost.Text -or -not $txtUser.Text -or -not $txtDrive.Text) {
+            [System.Windows.MessageBox]::Show("Fill in all required fields.", "Required", "OK", "Warning")
+            return
+        }
+
+        $connections = @(Load-Connections)
+
+        # Find and update the connection by original name
+        for ($i = 0; $i -lt $connections.Count; $i++) {
+            if ($connections[$i].Name -eq $originalName) {
+                $connections[$i] = @{
+                    Name = $txtName.Text
+                    Host = $txtHost.Text
+                    User = $txtUser.Text
+                    Drive = $txtDrive.Text.ToUpper()
+                    RemotePath = $txtRemotePath.Text
+                }
+                break
+            }
+        }
+
+        Save-Connections $connections
+        $editWindow.Close()
+        Refresh-ConnectionList
+        $script:statusText.Text = "Updated: $($txtName.Text)"
+    })
+
+    $btnCancel.Add_Click({ $editWindow.Close() })
+    $editWindow.ShowDialog()
 })
 
 # Remove
