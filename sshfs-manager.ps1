@@ -7,6 +7,30 @@ Add-Type -AssemblyName WindowsBase
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
+# Extract icon from shell32.dll
+Add-Type -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+using System.Drawing;
+
+public class IconExtractor {
+    [DllImport("shell32.dll", CharSet = CharSet.Auto)]
+    public static extern IntPtr ExtractIcon(IntPtr hInst, string lpszExeFileName, int nIconIndex);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    public static extern bool DestroyIcon(IntPtr hIcon);
+
+    public static Icon GetIcon(int index) {
+        IntPtr hIcon = ExtractIcon(IntPtr.Zero, "shell32.dll", index);
+        if (hIcon != IntPtr.Zero) {
+            Icon icon = Icon.FromHandle(hIcon);
+            return (Icon)icon.Clone();
+        }
+        return null;
+    }
+}
+"@ -ReferencedAssemblies System.Drawing
+
 # Configuration paths
 $script:ConfigPath = Join-Path $env:USERPROFILE "SSHFS\connections.json"
 $script:LogsPath = Join-Path $env:USERPROFILE "SSHFS\logs"
@@ -106,7 +130,19 @@ function Dismount-SSHFSDrive {
 # System Tray Functions
 function Create-TrayIcon {
     $script:notifyIcon = New-Object System.Windows.Forms.NotifyIcon
-    $script:notifyIcon.Icon = [System.Drawing.SystemIcons]::Application
+
+    # Use network drive icon from shell32.dll (index 9 = network drive, 275 = cloud)
+    try {
+        $icon = [IconExtractor]::GetIcon(9)
+        if ($icon) {
+            $script:notifyIcon.Icon = $icon
+        } else {
+            $script:notifyIcon.Icon = [System.Drawing.SystemIcons]::Application
+        }
+    } catch {
+        $script:notifyIcon.Icon = [System.Drawing.SystemIcons]::Application
+    }
+
     $script:notifyIcon.Text = "SSHFS Manager"
     $script:notifyIcon.Visible = $true
 
@@ -217,10 +253,16 @@ function Show-MainWindow {
     }
 }
 
+$script:isExiting = $false
+
 function Exit-Application {
+    $script:isExiting = $true
     if ($script:notifyIcon) {
         $script:notifyIcon.Visible = $false
         $script:notifyIcon.Dispose()
+    }
+    if ($script:hiddenForm) {
+        $script:hiddenForm.Close()
     }
     [System.Windows.Forms.Application]::Exit()
     [Environment]::Exit(0)
@@ -502,20 +544,42 @@ $btnDisconnect.Add_Click({
 # Refresh
 $btnRefresh.Add_Click({ Refresh-ConnectionList })
 
-# Minimize to tray on close
-$script:window.Add_Closing({
-    param($sender, $e)
-    $e.Cancel = $true
-    $script:window.Hide()
-    $script:notifyIcon.ShowBalloonTip(1500, "SSHFS Manager", "Running in system tray", [System.Windows.Forms.ToolTipIcon]::Info)
+# Minimize to tray on close - use proper event handler
+$script:window.add_Closing({
+    param($sender, $eventArgs)
+    # If exiting, allow close; otherwise minimize to tray
+    if (-not $script:isExiting) {
+        $eventArgs.Cancel = $true
+        $script:window.Hide()
+        $script:window.ShowInTaskbar = $false
+        $script:notifyIcon.ShowBalloonTip(1500, "SSHFS Manager", "Running in system tray. Right-click icon for menu.", [System.Windows.Forms.ToolTipIcon]::Info)
+    }
 })
 
 # Initialize
 Create-TrayIcon
 Refresh-ConnectionList
 
-# Show window
+# Create hidden form to keep app alive when WPF window is hidden
+$script:hiddenForm = New-Object System.Windows.Forms.Form
+$script:hiddenForm.WindowState = "Minimized"
+$script:hiddenForm.ShowInTaskbar = $false
+$script:hiddenForm.Opacity = 0
+$script:hiddenForm.FormBorderStyle = "None"
+$script:hiddenForm.Size = New-Object System.Drawing.Size(0, 0)
+
+# Override Show-MainWindow to restore taskbar
+function Show-MainWindow {
+    if ($script:window) {
+        $script:window.ShowInTaskbar = $true
+        $script:window.Show()
+        $script:window.WindowState = "Normal"
+        $script:window.Activate()
+    }
+}
+
+# Show WPF window
 $script:window.Show()
 
-# Application loop
-[System.Windows.Forms.Application]::Run()
+# Run application loop with hidden form
+[System.Windows.Forms.Application]::Run($script:hiddenForm)
