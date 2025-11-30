@@ -392,6 +392,12 @@ $btnAdd.Add_Click({
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         Title="Add Connection" Height="340" Width="420"
         WindowStartupLocation="CenterOwner" Background="#F5F5F5" ResizeMode="NoResize">
+    <Window.Resources>
+        <Style x:Key="PlaceholderTextBox" TargetType="TextBox">
+            <Setter Property="Padding" Value="6,4"/>
+            <Setter Property="Margin" Value="0,8"/>
+        </Style>
+    </Window.Resources>
     <Grid Margin="20">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
@@ -404,19 +410,34 @@ $btnAdd.Add_Click({
         </Grid.ColumnDefinitions>
 
         <TextBlock Grid.Row="0" Text="Name:" VerticalAlignment="Center" Margin="0,8"/>
-        <TextBox Grid.Row="0" Grid.Column="1" Name="TxtName" Margin="0,8" Padding="6,4"/>
+        <Grid Grid.Row="0" Grid.Column="1" Margin="0,8">
+            <TextBox Name="TxtName" Padding="6,4"/>
+            <TextBlock Name="PhName" Text="e.g. My VPS Server" Foreground="#999" Padding="8,6" IsHitTestVisible="False"/>
+        </Grid>
 
         <TextBlock Grid.Row="1" Text="Host/IP:" VerticalAlignment="Center" Margin="0,8"/>
-        <TextBox Grid.Row="1" Grid.Column="1" Name="TxtHost" Margin="0,8" Padding="6,4"/>
+        <Grid Grid.Row="1" Grid.Column="1" Margin="0,8">
+            <TextBox Name="TxtHost" Padding="6,4"/>
+            <TextBlock Name="PhHost" Text="e.g. 192.168.1.100 or server.com" Foreground="#999" Padding="8,6" IsHitTestVisible="False"/>
+        </Grid>
 
         <TextBlock Grid.Row="2" Text="Username:" VerticalAlignment="Center" Margin="0,8"/>
-        <TextBox Grid.Row="2" Grid.Column="1" Name="TxtUser" Margin="0,8" Padding="6,4"/>
+        <Grid Grid.Row="2" Grid.Column="1" Margin="0,8">
+            <TextBox Name="TxtUser" Padding="6,4"/>
+            <TextBlock Name="PhUser" Text="e.g. linuxuser" Foreground="#999" Padding="8,6" IsHitTestVisible="False"/>
+        </Grid>
 
         <TextBlock Grid.Row="3" Text="Drive:" VerticalAlignment="Center" Margin="0,8"/>
-        <TextBox Grid.Row="3" Grid.Column="1" Name="TxtDrive" Margin="0,8" Padding="6,4" MaxLength="1" Width="50" HorizontalAlignment="Left"/>
+        <Grid Grid.Row="3" Grid.Column="1" Margin="0,8" Width="50" HorizontalAlignment="Left">
+            <TextBox Name="TxtDrive" Padding="6,4" MaxLength="1"/>
+            <TextBlock Name="PhDrive" Text="X" Foreground="#999" Padding="8,6" IsHitTestVisible="False"/>
+        </Grid>
 
         <TextBlock Grid.Row="4" Text="Remote Path:" VerticalAlignment="Center" Margin="0,8"/>
-        <TextBox Grid.Row="4" Grid.Column="1" Name="TxtRemotePath" Margin="0,8" Padding="6,4"/>
+        <Grid Grid.Row="4" Grid.Column="1" Margin="0,8">
+            <TextBox Name="TxtRemotePath" Padding="6,4"/>
+            <TextBlock Name="PhPath" Text="e.g. /var/www (blank = home)" Foreground="#999" Padding="8,6" IsHitTestVisible="False"/>
+        </Grid>
 
         <TextBlock Grid.Row="5" Grid.ColumnSpan="2" Foreground="#666" FontSize="11" Margin="0,10" TextWrapping="Wrap">
             Leave Remote Path empty to mount user's home directory.
@@ -441,6 +462,20 @@ $btnAdd.Add_Click({
     $txtRemotePath = $addWindow.FindName("TxtRemotePath")
     $btnSave = $addWindow.FindName("BtnSave")
     $btnCancel = $addWindow.FindName("BtnCancel")
+
+    # Get placeholder textblocks
+    $phName = $addWindow.FindName("PhName")
+    $phHost = $addWindow.FindName("PhHost")
+    $phUser = $addWindow.FindName("PhUser")
+    $phDrive = $addWindow.FindName("PhDrive")
+    $phPath = $addWindow.FindName("PhPath")
+
+    # Hide placeholder when user types
+    $txtName.Add_TextChanged({ $phName.Visibility = if ($txtName.Text) { "Collapsed" } else { "Visible" } })
+    $txtHost.Add_TextChanged({ $phHost.Visibility = if ($txtHost.Text) { "Collapsed" } else { "Visible" } })
+    $txtUser.Add_TextChanged({ $phUser.Visibility = if ($txtUser.Text) { "Collapsed" } else { "Visible" } })
+    $txtDrive.Add_TextChanged({ $phDrive.Visibility = if ($txtDrive.Text) { "Collapsed" } else { "Visible" } })
+    $txtRemotePath.Add_TextChanged({ $phPath.Visibility = if ($txtRemotePath.Text) { "Collapsed" } else { "Visible" } })
 
     $btnSave.Add_Click({
         if (-not $txtName.Text -or -not $txtHost.Text -or -not $txtUser.Text -or -not $txtDrive.Text) {
@@ -493,19 +528,34 @@ $btnEdit.Add_Click({
         </Grid.ColumnDefinitions>
 
         <TextBlock Grid.Row="0" Text="Name:" VerticalAlignment="Center" Margin="0,8"/>
-        <TextBox Grid.Row="0" Grid.Column="1" Name="TxtName" Margin="0,8" Padding="6,4"/>
+        <Grid Grid.Row="0" Grid.Column="1" Margin="0,8">
+            <TextBox Name="TxtName" Padding="6,4"/>
+            <TextBlock Name="PhName" Text="e.g. My VPS Server" Foreground="#999" Padding="8,6" IsHitTestVisible="False" Visibility="Collapsed"/>
+        </Grid>
 
         <TextBlock Grid.Row="1" Text="Host/IP:" VerticalAlignment="Center" Margin="0,8"/>
-        <TextBox Grid.Row="1" Grid.Column="1" Name="TxtHost" Margin="0,8" Padding="6,4"/>
+        <Grid Grid.Row="1" Grid.Column="1" Margin="0,8">
+            <TextBox Name="TxtHost" Padding="6,4"/>
+            <TextBlock Name="PhHost" Text="e.g. 192.168.1.100 or server.com" Foreground="#999" Padding="8,6" IsHitTestVisible="False" Visibility="Collapsed"/>
+        </Grid>
 
         <TextBlock Grid.Row="2" Text="Username:" VerticalAlignment="Center" Margin="0,8"/>
-        <TextBox Grid.Row="2" Grid.Column="1" Name="TxtUser" Margin="0,8" Padding="6,4"/>
+        <Grid Grid.Row="2" Grid.Column="1" Margin="0,8">
+            <TextBox Name="TxtUser" Padding="6,4"/>
+            <TextBlock Name="PhUser" Text="e.g. linuxuser" Foreground="#999" Padding="8,6" IsHitTestVisible="False" Visibility="Collapsed"/>
+        </Grid>
 
         <TextBlock Grid.Row="3" Text="Drive:" VerticalAlignment="Center" Margin="0,8"/>
-        <TextBox Grid.Row="3" Grid.Column="1" Name="TxtDrive" Margin="0,8" Padding="6,4" MaxLength="1" Width="50" HorizontalAlignment="Left"/>
+        <Grid Grid.Row="3" Grid.Column="1" Margin="0,8" Width="50" HorizontalAlignment="Left">
+            <TextBox Name="TxtDrive" Padding="6,4" MaxLength="1"/>
+            <TextBlock Name="PhDrive" Text="X" Foreground="#999" Padding="8,6" IsHitTestVisible="False" Visibility="Collapsed"/>
+        </Grid>
 
         <TextBlock Grid.Row="4" Text="Remote Path:" VerticalAlignment="Center" Margin="0,8"/>
-        <TextBox Grid.Row="4" Grid.Column="1" Name="TxtRemotePath" Margin="0,8" Padding="6,4"/>
+        <Grid Grid.Row="4" Grid.Column="1" Margin="0,8">
+            <TextBox Name="TxtRemotePath" Padding="6,4"/>
+            <TextBlock Name="PhPath" Text="e.g. /var/www (blank = home)" Foreground="#999" Padding="8,6" IsHitTestVisible="False"/>
+        </Grid>
 
         <TextBlock Grid.Row="5" Grid.ColumnSpan="2" Foreground="#666" FontSize="11" Margin="0,10" TextWrapping="Wrap">
             Leave Remote Path empty to mount user's home directory.
@@ -531,12 +581,29 @@ $btnEdit.Add_Click({
     $btnSave = $editWindow.FindName("BtnSave")
     $btnCancel = $editWindow.FindName("BtnCancel")
 
+    # Get placeholder textblocks
+    $phName = $editWindow.FindName("PhName")
+    $phHost = $editWindow.FindName("PhHost")
+    $phUser = $editWindow.FindName("PhUser")
+    $phDrive = $editWindow.FindName("PhDrive")
+    $phPath = $editWindow.FindName("PhPath")
+
+    # Hide placeholder when user types (show if empty)
+    $txtName.Add_TextChanged({ $phName.Visibility = if ($txtName.Text) { "Collapsed" } else { "Visible" } })
+    $txtHost.Add_TextChanged({ $phHost.Visibility = if ($txtHost.Text) { "Collapsed" } else { "Visible" } })
+    $txtUser.Add_TextChanged({ $phUser.Visibility = if ($txtUser.Text) { "Collapsed" } else { "Visible" } })
+    $txtDrive.Add_TextChanged({ $phDrive.Visibility = if ($txtDrive.Text) { "Collapsed" } else { "Visible" } })
+    $txtRemotePath.Add_TextChanged({ $phPath.Visibility = if ($txtRemotePath.Text) { "Collapsed" } else { "Visible" } })
+
     # Pre-fill with existing values
     $txtName.Text = $selected.Name
     $txtHost.Text = $selected.Host
     $txtUser.Text = $selected.User
     $txtDrive.Text = $selected.Drive.TrimEnd(':')
     $txtRemotePath.Text = if ($selected.RemotePath -eq "(home)") { "" } else { $selected.RemotePath }
+
+    # Show placeholder for remote path if empty
+    if (-not $txtRemotePath.Text) { $phPath.Visibility = "Visible" }
 
     $btnSave.Add_Click({
         if (-not $txtName.Text -or -not $txtHost.Text -or -not $txtUser.Text -or -not $txtDrive.Text) {
