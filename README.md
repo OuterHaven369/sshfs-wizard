@@ -1,17 +1,38 @@
 # SSHFS Wizard
 
-A PowerShell-based automated installer for mounting remote Linux filesystems on Windows via SSHFS.
+A PowerShell-based automated installer for mounting remote Linux filesystems on Windows via SSHFS, with a graphical connection manager.
 
 ## What It Does
 
 SSHFS Wizard automates the complete setup process for mounting remote Linux directories as Windows drive letters:
 
+- **Graphical Connection Manager**: Modern Windows GUI to manage all your SSHFS connections
 - **Automatic Dependency Installation**: Installs WinFsp and SSHFS-Win via winget
 - **SSH Key Management**: Generates ed25519 SSH keys if needed
 - **Passwordless Authentication**: Configures SSH key-based authentication to your VPS
 - **Auto-Mount Scripts**: Creates reconnect and unmount scripts
-- **Scheduled Tasks**: Automatically mounts on logon and unmounts on logoff
+- **Scheduled Tasks**: Automatically mounts on logon
 - **Connection Resilience**: Built-in retry logic with ping checks before mounting
+
+## GUI Manager (Recommended)
+
+**NEW**: Double-click `SSHFS-MANAGER.bat` to launch the graphical connection manager!
+
+The GUI manager provides:
+- View all configured connections with live status indicators
+- Add/Edit/Remove connections with a user-friendly form
+- Connect/Disconnect drives with one click
+- Real-time status updates showing which drives are mounted
+- No command-line required!
+
+![SSHFS Manager Interface](https://via.placeholder.com/800x500.png?text=SSHFS+Connection+Manager)
+
+**Quick Start with GUI:**
+1. Run `install.ps1` once to set up dependencies and SSH keys
+2. Launch `SSHFS-MANAGER.bat`
+3. Click "Add New" to create connections
+4. Click "Connect" to mount drives
+5. All connections are saved and persist across sessions
 
 ## Prerequisites
 

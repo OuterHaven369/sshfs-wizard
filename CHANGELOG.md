@@ -2,6 +2,34 @@
 
 All notable changes to SSHFS-Wizard will be documented in this file.
 
+## [1.1.0] - 2025-11-30
+
+### Added - MAJOR FEATURE
+- **Graphical Connection Manager (sshfs-manager.ps1)**
+  - Modern WPF-based GUI for managing SSHFS connections
+  - View all connections with live status indicators (Connected/Disconnected)
+  - Add/Edit/Remove connections through user-friendly forms
+  - Connect/Disconnect drives with one-click buttons
+  - Real-time status updates showing mounted drives
+  - Persistent connection storage in %USERPROFILE%\SSHFS\connections.json
+  - SSHFS-MANAGER.bat launcher for easy double-click access
+
+### Features
+- **Connection List DataGrid**: Displays Name, Host, User, Drive, Status, Remote Path
+- **Add New Connection**: Form with fields for all connection parameters
+- **Remove Connection**: Delete saved connections
+- **Connect Button**: Mount selected connection with SSH test beforehand
+- **Disconnect Button**: Unmount active drives
+- **Refresh Button**: Update connection status display
+- **Status Bar**: Real-time feedback for all operations
+
+### User Experience
+- No command-line knowledge required
+- Works on Windows 10/11 with native WPF
+- Automatically detects mounted vs unmounted drives
+- SSH connectivity test before attempting mount
+- Clear error messages for troubleshooting
+
 ## [1.0.3] - 2025-11-28
 
 ### Fixed - CRITICAL
