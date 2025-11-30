@@ -1,6 +1,60 @@
 # Changelog
 
-All notable changes to SSHFS-Wizard will be documented in this file.
+All notable changes to SSHFS Manager will be documented in this file.
+
+## [1.3.0] - 2025-11-30
+
+### Added - Production Release
+- **Proper Windows Installer**
+  - `Setup.bat` for one-click installation
+  - Installs to `C:\Program Files\SSHFS Manager`
+  - Creates Start Menu folder with shortcuts
+  - Creates Desktop shortcut
+  - Registers in Windows Add/Remove Programs
+  - Full uninstaller support
+
+### Changed
+- **Project Restructure**
+  - Moved source files to `src/` directory
+  - Created `installer/` directory for install scripts
+  - Cleaned up old test files
+  - Professional folder structure
+
+### Features
+- Uninstall via Windows Settings → Apps
+- Uninstall via Start Menu shortcut
+- Silent install option (`-Silent` flag)
+- Custom install path option
+- Automatic dependency installation (WinFsp, SSHFS-Win)
+
+## [1.2.3] - 2025-11-30
+
+### Added
+- Placeholder examples in Add/Edit dialogs
+- Hidden PowerShell console (no window appears)
+
+## [1.2.2] - 2025-11-30
+
+### Added
+- Edit button to modify existing connections
+- Pre-filled edit form with current values
+
+## [1.2.1] - 2025-11-30
+
+### Fixed
+- Minimize to tray now works correctly
+- Network drive icon from shell32.dll
+
+## [1.2.0] - 2025-11-30
+
+### Added
+- System tray icon with context menu
+- Minimize to tray on close
+- Run at Startup option
+- Connect All / Disconnect All from tray
+
+### Fixed
+- Drive status detection for SSHFS mounts
 
 ## [1.1.0] - 2025-11-30
 

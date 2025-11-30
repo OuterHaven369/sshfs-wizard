@@ -1,215 +1,168 @@
-# SSHFS Wizard
+# SSHFS Manager
 
-A PowerShell-based automated installer for mounting remote Linux filesystems on Windows via SSHFS, with a graphical connection manager.
+A Windows application for mounting remote Linux filesystems as local drives via SSHFS. Features a modern GUI with system tray integration.
 
-## What It Does
+## Features
 
-SSHFS Wizard automates the complete setup process for mounting remote Linux directories as Windows drive letters:
-
-- **Graphical Connection Manager**: Modern Windows GUI to manage all your SSHFS connections
-- **Automatic Dependency Installation**: Installs WinFsp and SSHFS-Win via winget
-- **SSH Key Management**: Generates ed25519 SSH keys if needed
-- **Passwordless Authentication**: Configures SSH key-based authentication to your VPS
-- **Auto-Mount Scripts**: Creates reconnect and unmount scripts
-- **Scheduled Tasks**: Automatically mounts on logon
-- **Connection Resilience**: Built-in retry logic with ping checks before mounting
-
-## GUI Manager (Recommended)
-
-**NEW**: Double-click `SSHFS-MANAGER.bat` to launch the graphical connection manager!
-
-The GUI manager provides:
-- View all configured connections with live status indicators
-- Add/Edit/Remove connections with a user-friendly form
-- Connect/Disconnect drives with one click
-- Real-time status updates showing which drives are mounted
-- No command-line required!
-
-![SSHFS Manager Interface](https://via.placeholder.com/800x500.png?text=SSHFS+Connection+Manager)
-
-**Quick Start with GUI:**
-1. Run `install.ps1` once to set up dependencies and SSH keys
-2. Launch `SSHFS-MANAGER.bat`
-3. Click "Add New" to create connections
-4. Click "Connect" to mount drives
-5. All connections are saved and persist across sessions
-
-## Prerequisites
-
-- Windows 10/11
-- PowerShell 5.1 or later
-- Administrator privileges
-- winget (App Installer from Microsoft Store)
-- Network access to your remote Linux server/VPS
+- **Graphical Connection Manager** - Modern Windows GUI for managing connections
+- **System Tray Integration** - Runs quietly in the background with quick-access menu
+- **Multiple Connections** - Manage multiple SSHFS mounts simultaneously
+- **One-Click Connect/Disconnect** - Simple drive management
+- **Auto-Start Option** - Launch automatically on Windows startup
+- **Proper Windows Integration** - Appears in Start Menu and Add/Remove Programs
+- **Placeholder Examples** - Input fields show examples for easy setup
 
 ## Installation
 
-1. **Download and Extract**
-   ```
-   Extract SSHFS-Wizard.zip to a location like C:\Users\YourName\Downloads\SSHFS-Wizard
-   ```
+### Quick Install (Recommended)
 
-2. **Run as Administrator**
+1. **Download** the latest release or clone the repository
+2. **Double-click `Setup.bat`**
+3. **Click Yes** when prompted for administrator privileges
+4. **Follow the on-screen prompts**
 
-   **Option A: Double-click installer (Recommended)**
-   - Double-click `INSTALL.bat`
-   - Click "Yes" when prompted for administrator privileges
+The installer automatically:
+- Installs dependencies (WinFsp, SSHFS-Win) via winget
+- Copies application to `C:\Program Files\SSHFS Manager`
+- Creates Start Menu shortcuts
+- Creates Desktop shortcut
+- Registers in Windows **Add/Remove Programs**
 
-   **Option B: Via PowerShell**
-   ```powershell
-   Right-click PowerShell → Run as administrator
-   cd C:\Users\YourName\Downloads\SSHFS-Wizard
-   powershell -ExecutionPolicy Bypass -File .\install.ps1
-   ```
+### After Installation
 
-3. **Follow the Prompts**
-   - **Enter your server hostname or IP** (e.g., `45.76.12.161`, `myserver.com`)
-   - **Enter your SSH username** (e.g., `myuser`, `admin`)
-   - **Choose drive letter** - installer will auto-detect available drives and let you pick
-   - Optionally specify remote path (default: home directory)
+Find **SSHFS Manager** in:
+- Start Menu → SSHFS Manager
+- Desktop shortcut
+- System tray (after first launch)
+
+## Uninstallation
+
+**Option 1: Windows Settings**
+1. Open **Settings** → **Apps** → **Apps & features**
+2. Search for "SSHFS Manager"
+3. Click **Uninstall**
+
+**Option 2: Start Menu**
+- Start Menu → SSHFS Manager → Uninstall SSHFS Manager
 
 ## Usage
 
-### Command-Line Parameters (Optional)
+### Adding a Connection
 
-You can run the installer with parameters to skip prompts:
+1. Click **+ Add** button
+2. Fill in the connection details (placeholder examples shown):
+   - **Name**: A friendly name (e.g., "My VPS Server")
+   - **Host/IP**: Server address (e.g., "192.168.1.100")
+   - **Username**: SSH username (e.g., "linuxuser")
+   - **Drive**: Drive letter to mount (e.g., "X")
+   - **Remote Path**: Path to mount (leave empty for home directory)
+3. Click **Save**
+
+### Connecting a Drive
+
+1. Select a connection from the list
+2. Click **Connect**
+3. Status changes to "Connected" (green)
+4. Drive appears in File Explorer
+
+### Editing a Connection
+
+1. Select the connection
+2. Click **Edit**
+3. Modify any fields
+4. Click **Save**
+
+### System Tray
+
+The app minimizes to the system tray when you click X.
+
+- **Double-click** tray icon → Open manager window
+- **Right-click** tray icon → Quick actions menu:
+  - Open Manager
+  - Connect All
+  - Disconnect All
+  - Run at Startup (toggle)
+  - Exit
+
+## Prerequisites
+
+The installer handles these automatically:
+
+- Windows 10/11
+- [WinFsp](https://winfsp.dev/) - Windows File System Proxy
+- [SSHFS-Win](https://github.com/winfsp/sshfs-win) - SSHFS for Windows
+- SSH key authentication configured for your servers
+
+## SSH Key Setup
+
+If you don't have SSH keys configured:
 
 ```powershell
-# Automatic drive selection (prompts for hostname and username)
-.\install.ps1
+# Generate SSH key
+ssh-keygen -t ed25519
 
-# Pre-specify server and user (auto-detects drive)
-.\install.ps1 -HostName "your-server.com" -User "yourusername"
-
-# Specify everything including preferred drive
-.\install.ps1 -HostName "192.168.1.100" -User "admin" -Drive "Y"
+# Copy to server (replace user@host)
+type $env:USERPROFILE\.ssh\id_ed25519.pub | ssh user@host "mkdir -p ~/.ssh && cat >> ~/.ssh/authorized_keys"
 ```
 
-**Parameters:**
-- `-HostName`: (Optional) VPS hostname or IP address - **prompts if not provided**
-- `-User`: (Optional) SSH username on the VPS - **prompts if not provided**
-- `-Drive`: (Optional) Preferred Windows drive letter. Auto-detects if not specified
-- `-Interactive`: (Optional) Enable wizard mode with prompts. **Default is automated (no prompts)**
+## Project Structure
 
-**Examples:**
-```powershell
-# Default: Automated mode - no drive prompts (perfect for AI/scripts)
-.\install.ps1 -HostName "192.168.50.10" -User "admin"
-
-# Wizard mode - interactive prompts for drive selection
-.\install.ps1 -HostName "myserver.example.com" -User "john" -Interactive
-
-# Specify exact drive (skips auto-detection entirely)
-.\install.ps1 -HostName "vps.company.net" -User "developer" -Drive "Y"
+```
+sshfs-wizard/
+├── Setup.bat                      # Installer launcher (double-click this)
+├── installer/
+│   ├── Install-SSHFSManager.ps1   # Windows installer
+│   └── Uninstall-SSHFSManager.ps1 # Uninstaller
+├── src/
+│   ├── sshfs-manager.ps1          # Main GUI application
+│   └── sshfs-setup.ps1            # CLI setup tool
+├── assets/                        # Icons and images
+├── README.md
+├── CHANGELOG.md
+└── LICENSE
 ```
 
-### Smart Drive Selection
+## Configuration
 
-The installer automatically:
-- Detects all available drive letters (D-Z)
-- Auto-selects the first available drive if none specified
-- Warns you if your preferred drive is in use and shows alternatives
-- Allows you to choose a different drive during installation
-- Never overwrites existing drive mappings
-
-### What Gets Installed
-
-The installer creates the following structure:
-
+User data is stored in:
 ```
 %USERPROFILE%\SSHFS\
-├── settings.json              # Connection configuration
-├── sshfs_reconnect.cmd        # Mount script
-├── sshfs_unmount.cmd          # Unmount script
-└── logs\
-    ├── mount.log              # Mount operation logs
-    └── unmount.log            # Unmount operation logs
-```
-
-### Scheduled Tasks
-
-One Windows scheduled task is created:
-- `SSHFS_Mount_X` - Runs on user logon (10-second delay)
-
-**Note**: Auto-unmount on logoff is not created by default due to Windows compatibility issues. The drive will persist across sessions, which is generally more reliable. You can manually unmount anytime using the unmount script.
-
-### Manual Mount/Unmount
-
-```cmd
-# Mount manually
-%USERPROFILE%\SSHFS\sshfs_reconnect.cmd
-
-# Unmount manually
-%USERPROFILE%\SSHFS\sshfs_unmount.cmd
+├── connections.json    # Saved connections
+├── settings.json       # Mount settings
+└── logs\               # Operation logs
 ```
 
 ## Troubleshooting
 
-### Check Logs
-```cmd
-type %USERPROFILE%\SSHFS\logs\mount.log
-type %USERPROFILE%\SSHFS\logs\unmount.log
-```
+### Drive not appearing in File Explorer
+- Verify SSH connection: `ssh user@host`
+- Check WinFsp service is running
+- Try Disconnect then Connect again
+- Check logs in `%USERPROFILE%\SSHFS\logs\`
 
-### Verify Scheduled Tasks
-```cmd
-schtasks /Query /TN "SSHFS_Mount_X"
-schtasks /Query /TN "SSHFS_Unmount_X"
-```
+### SSH connection fails
+- Ensure SSH key is set up correctly
+- Verify server is reachable: `ping hostname`
+- Check firewall allows port 22
 
-### Test SSH Connection
-```powershell
-ssh user@host "echo ok"
-```
-
-### Common Issues
-
-**"winget is not available"**
-- Install "App Installer" from Microsoft Store
-
-**"Passwordless SSH still not working"**
-- Manually verify `~/.ssh/authorized_keys` permissions on the VPS (chmod 600)
-- Check SSH server configuration allows key authentication
-
-**"Mount command issued but drive not appearing"**
-- Check if SSHFS-Win service is running: `Get-Service | Where-Object {$_.Name -like "*sshfs*"}`
-- Verify firewall allows SSH connections (port 22)
-- Check mount.log for specific errors
-
-## Security Notes
-
-- SSH keys are generated using ed25519 algorithm (modern, secure)
-- Keys are stored in `%USERPROFILE%\.ssh\` with appropriate permissions
-- No passwords are stored anywhere
-- All authentication uses SSH key pairs
-
-## Uninstallation
-
-```powershell
-# Remove scheduled tasks
-schtasks /Delete /TN "SSHFS_Mount_X" /F
-schtasks /Delete /TN "SSHFS_Unmount_X" /F
-
-# Unmount drive
-net use X: /delete /y
-
-# Remove scripts and configuration
-Remove-Item -Recurse -Force "$env:USERPROFILE\SSHFS"
-
-# Optionally uninstall dependencies
-winget uninstall SSHFS-Win.SSHFS-Win
-winget uninstall WinFsp.WinFsp
-```
+### App won't start
+- Try running as Administrator
+- Check Windows Event Viewer for errors
+- Reinstall using Setup.bat
 
 ## License
 
-MIT License - See LICENSE file
+MIT License - see [LICENSE](LICENSE) file.
 
 ## Contributing
 
-Contributions welcome! Please open an issue or pull request on GitHub.
+Contributions welcome! Please open an issue or pull request.
+
+## Version History
+
+See [CHANGELOG.md](CHANGELOG.md) for detailed version history.
 
 ## Credits
 
-- Built with WinFsp (https://winfsp.dev/)
-- Uses SSHFS-Win (https://github.com/winfsp/sshfs-win)
+- Built with [WinFsp](https://winfsp.dev/)
+- Uses [SSHFS-Win](https://github.com/winfsp/sshfs-win)
