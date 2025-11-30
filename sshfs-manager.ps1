@@ -1,11 +1,13 @@
-# SSHFS Manager - GUI for managing SSHFS connections on Windows
+# SSHFS Manager - System Tray GUI for managing SSHFS connections on Windows
 # Requires: WinFsp, SSHFS-Win
 
 Add-Type -AssemblyName PresentationFramework
 Add-Type -AssemblyName PresentationCore
 Add-Type -AssemblyName WindowsBase
+Add-Type -AssemblyName System.Windows.Forms
+Add-Type -AssemblyName System.Drawing
 
-# Configuration file path
+# Configuration paths
 $script:ConfigPath = Join-Path $env:USERPROFILE "SSHFS\connections.json"
 $script:LogsPath = Join-Path $env:USERPROFILE "SSHFS\logs"
 
@@ -17,8 +19,12 @@ if (-not (Test-Path $script:LogsPath)) { New-Item -ItemType Directory -Path $scr
 # Load or create connections config
 function Load-Connections {
     if (Test-Path $script:ConfigPath) {
-        $content = Get-Content $script:ConfigPath -Raw | ConvertFrom-Json
-        return $content
+        try {
+            $content = Get-Content $script:ConfigPath -Raw | ConvertFrom-Json
+            return @($content)
+        } catch {
+            return @()
+        }
     } else {
         return @()
     }
@@ -26,26 +32,50 @@ function Load-Connections {
 
 function Save-Connections {
     param($Connections)
-    $Connections | ConvertTo-Json | Set-Content -Path $script:ConfigPath -Encoding UTF8
+    $Connections | ConvertTo-Json -Depth 10 | Set-Content -Path $script:ConfigPath -Encoding UTF8
 }
 
 function Get-MountedDrives {
     $mounted = @{}
-    $netUse = net use 2>$null | Select-String "^\s*(OK|Unavailable|Disconnected)?\s+([A-Z]:)\s+(.+?)\s+(WinFsp\.Np|Microsoft)"
-    foreach ($line in $netUse) {
-        if ($line -match '\s([A-Z]:)\s+(.+?)\s+') {
-            $drive = $matches[1]
-            $remote = $matches[2].Trim()
+
+    # Parse net use output - handle SSHFS drives that have no status prefix
+    $netOutput = cmd /c "net use" 2>$null
+    $lines = $netOutput -split "`r?`n"
+
+    foreach ($line in $lines) {
+        # Match: "             E:        \\sshfs.k\user@host"
+        # Or:    "OK           Z:        \\192.168.x.x\share"
+        if ($line -match '^\s*(OK|Unavailable|Disconnected|)\s+([A-Z]:)\s+(\\\\[^\s]+)') {
+            $drive = $matches[2]
+            $remote = $matches[3].Trim()
             $mounted[$drive] = $remote
         }
     }
+
     return $mounted
 }
 
+function Get-ConnectionStatus {
+    param([string]$HostName, [string]$User, [string]$Drive)
+
+    $mounted = Get-MountedDrives
+    $driveKey = "$($Drive.TrimEnd(':').ToUpper()):"
+
+    if ($mounted.ContainsKey($driveKey)) {
+        $remote = $mounted[$driveKey]
+        if ($remote -like "*$User*" -and $remote -like "*$HostName*") {
+            return "Connected"
+        } elseif ($remote -like "*sshfs*") {
+            return "Wrong Mount"
+        }
+    }
+    return "Disconnected"
+}
+
 function Test-SSHConnection {
-    param([string]$Host, [string]$User)
+    param([string]$HostName, [string]$User)
     try {
-        $result = ssh -o ConnectTimeout=3 -o BatchMode=yes "$User@$Host" "echo ok" 2>$null
+        $result = ssh -o ConnectTimeout=5 -o BatchMode=yes -o StrictHostKeyChecking=no "$User@$HostName" "echo ok" 2>$null
         return ($LASTEXITCODE -eq 0)
     } catch {
         return $false
@@ -53,47 +83,168 @@ function Test-SSHConnection {
 }
 
 function Mount-SSHFSDrive {
-    param([string]$Host, [string]$User, [string]$Drive, [string]$RemotePath = "")
+    param([string]$HostName, [string]$User, [string]$Drive, [string]$RemotePath = "")
 
-    $Drive = $Drive.TrimEnd(':')
-    $remotePrefix = "\sshfs.k\$User@$Host"
-    if ($RemotePath) {
-        $remotePrefix += "\$RemotePath"
+    $Drive = $Drive.TrimEnd(':').ToUpper()
+    $prefix = "\\sshfs.k\\$User@$HostName"
+    if ($RemotePath -and $RemotePath -ne "(home)") {
+        $prefix += "\$RemotePath"
     }
 
-    $result = cmd /c "sshfs-win.exe svc \\sshfs.k\\$User@$Host $($Drive): 2>&1"
-    return ($LASTEXITCODE -eq 0)
+    $proc = Start-Process -FilePath "sshfs-win.exe" -ArgumentList "svc", $prefix, "$($Drive):" -PassThru -WindowStyle Hidden
+    Start-Sleep -Seconds 3
+    return $true
 }
 
 function Dismount-SSHFSDrive {
     param([string]$Drive)
-    $Drive = $Drive.TrimEnd(':')
-    net use "$($Drive):" /delete /y 2>&1 | Out-Null
-    return ($LASTEXITCODE -eq 0)
+    $Drive = $Drive.TrimEnd(':').ToUpper()
+    cmd /c "net use $($Drive): /delete /y" 2>&1 | Out-Null
+    return $true
 }
 
-# XAML UI Definition
+# System Tray Functions
+function Create-TrayIcon {
+    $script:notifyIcon = New-Object System.Windows.Forms.NotifyIcon
+    $script:notifyIcon.Icon = [System.Drawing.SystemIcons]::Application
+    $script:notifyIcon.Text = "SSHFS Manager"
+    $script:notifyIcon.Visible = $true
+
+    # Context menu
+    $contextMenu = New-Object System.Windows.Forms.ContextMenuStrip
+
+    $showItem = New-Object System.Windows.Forms.ToolStripMenuItem
+    $showItem.Text = "Open Manager"
+    $showItem.Add_Click({ Show-MainWindow })
+    $contextMenu.Items.Add($showItem) | Out-Null
+
+    $contextMenu.Items.Add("-") | Out-Null
+
+    $connectAllItem = New-Object System.Windows.Forms.ToolStripMenuItem
+    $connectAllItem.Text = "Connect All"
+    $connectAllItem.Add_Click({ Connect-AllDrives })
+    $contextMenu.Items.Add($connectAllItem) | Out-Null
+
+    $disconnectAllItem = New-Object System.Windows.Forms.ToolStripMenuItem
+    $disconnectAllItem.Text = "Disconnect All"
+    $disconnectAllItem.Add_Click({ Disconnect-AllDrives })
+    $contextMenu.Items.Add($disconnectAllItem) | Out-Null
+
+    $contextMenu.Items.Add("-") | Out-Null
+
+    $script:startupItem = New-Object System.Windows.Forms.ToolStripMenuItem
+    $script:startupItem.Text = "Run at Startup"
+    $script:startupItem.CheckOnClick = $true
+    $script:startupItem.Checked = (Test-StartupEnabled)
+    $script:startupItem.Add_Click({ Toggle-Startup $script:startupItem.Checked })
+    $contextMenu.Items.Add($script:startupItem) | Out-Null
+
+    $contextMenu.Items.Add("-") | Out-Null
+
+    $exitItem = New-Object System.Windows.Forms.ToolStripMenuItem
+    $exitItem.Text = "Exit"
+    $exitItem.Add_Click({ Exit-Application })
+    $contextMenu.Items.Add($exitItem) | Out-Null
+
+    $script:notifyIcon.ContextMenuStrip = $contextMenu
+    $script:notifyIcon.Add_DoubleClick({ Show-MainWindow })
+}
+
+function Test-StartupEnabled {
+    $startupPath = Join-Path ([Environment]::GetFolderPath("Startup")) "SSHFS-Manager.lnk"
+    return (Test-Path $startupPath)
+}
+
+function Toggle-Startup {
+    param([bool]$Enable)
+
+    $startupPath = Join-Path ([Environment]::GetFolderPath("Startup")) "SSHFS-Manager.lnk"
+    $targetPath = Join-Path $PSScriptRoot "SSHFS-MANAGER.bat"
+
+    if ($Enable) {
+        $shell = New-Object -ComObject WScript.Shell
+        $shortcut = $shell.CreateShortcut($startupPath)
+        $shortcut.TargetPath = $targetPath
+        $shortcut.WorkingDirectory = $PSScriptRoot
+        $shortcut.WindowStyle = 7
+        $shortcut.Save()
+        $script:notifyIcon.ShowBalloonTip(2000, "SSHFS Manager", "Will start automatically with Windows", [System.Windows.Forms.ToolTipIcon]::Info)
+    } else {
+        if (Test-Path $startupPath) { Remove-Item $startupPath -Force }
+        $script:notifyIcon.ShowBalloonTip(2000, "SSHFS Manager", "Removed from startup", [System.Windows.Forms.ToolTipIcon]::Info)
+    }
+}
+
+function Connect-AllDrives {
+    $connections = Load-Connections
+    foreach ($conn in $connections) {
+        $status = Get-ConnectionStatus -HostName $conn.Host -User $conn.User -Drive $conn.Drive
+        if ($status -ne "Connected") {
+            Mount-SSHFSDrive -HostName $conn.Host -User $conn.User -Drive $conn.Drive -RemotePath $conn.RemotePath
+        }
+    }
+    if ($script:connectionGrid) { Refresh-ConnectionList }
+    Update-TrayTooltip
+}
+
+function Disconnect-AllDrives {
+    $connections = Load-Connections
+    foreach ($conn in $connections) {
+        $status = Get-ConnectionStatus -HostName $conn.Host -User $conn.User -Drive $conn.Drive
+        if ($status -eq "Connected") {
+            Dismount-SSHFSDrive -Drive $conn.Drive
+        }
+    }
+    if ($script:connectionGrid) { Refresh-ConnectionList }
+    Update-TrayTooltip
+}
+
+function Update-TrayTooltip {
+    $connections = Load-Connections
+    $connected = 0
+    foreach ($conn in $connections) {
+        $status = Get-ConnectionStatus -HostName $conn.Host -User $conn.User -Drive $conn.Drive
+        if ($status -eq "Connected") { $connected++ }
+    }
+    $script:notifyIcon.Text = "SSHFS Manager - $connected/$($connections.Count) connected"
+}
+
+function Show-MainWindow {
+    if ($script:window) {
+        $script:window.Show()
+        $script:window.WindowState = "Normal"
+        $script:window.Activate()
+    }
+}
+
+function Exit-Application {
+    if ($script:notifyIcon) {
+        $script:notifyIcon.Visible = $false
+        $script:notifyIcon.Dispose()
+    }
+    [System.Windows.Forms.Application]::Exit()
+    [Environment]::Exit(0)
+}
+
+# XAML UI
 $xaml = @"
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="SSHFS Connection Manager" Height="600" Width="900"
-        WindowStartupLocation="CenterScreen" Background="#F0F0F0">
+        Title="SSHFS Connection Manager" Height="500" Width="800"
+        WindowStartupLocation="CenterScreen" Background="#F5F5F5">
     <Window.Resources>
         <Style TargetType="Button">
-            <Setter Property="Padding" Value="10,5"/>
-            <Setter Property="Margin" Value="5"/>
+            <Setter Property="Padding" Value="12,6"/>
+            <Setter Property="Margin" Value="4"/>
             <Setter Property="MinWidth" Value="100"/>
-        </Style>
-        <Style TargetType="TextBox">
-            <Setter Property="Padding" Value="5"/>
-            <Setter Property="Margin" Value="5,2"/>
-        </Style>
-        <Style TargetType="Label">
-            <Setter Property="Padding" Value="5,5,5,2"/>
+            <Setter Property="Background" Value="#0078D4"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Cursor" Value="Hand"/>
         </Style>
     </Window.Resources>
 
-    <Grid Margin="10">
+    <Grid Margin="15">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
@@ -101,126 +252,135 @@ $xaml = @"
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <!-- Title -->
-        <TextBlock Grid.Row="0" Text="SSHFS Connection Manager" FontSize="20" FontWeight="Bold" Margin="0,0,0,10"/>
+        <StackPanel Grid.Row="0" Margin="0,0,0,10">
+            <TextBlock Text="SSHFS Connection Manager" FontSize="22" FontWeight="SemiBold"/>
+            <TextBlock Text="Mount remote Linux directories as Windows drives" Foreground="#666" Margin="0,3,0,0"/>
+        </StackPanel>
 
-        <!-- Connection List -->
         <DataGrid Grid.Row="1" Name="ConnectionGrid" AutoGenerateColumns="False"
                   IsReadOnly="True" SelectionMode="Single" CanUserAddRows="False"
-                  GridLinesVisibility="Horizontal" AlternatingRowBackground="#F9F9F9">
+                  GridLinesVisibility="Horizontal" AlternatingRowBackground="#FAFAFA"
+                  RowHeight="32" Background="White" BorderBrush="#DDD">
             <DataGrid.Columns>
-                <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="150"/>
-                <DataGridTextColumn Header="Host" Binding="{Binding Host}" Width="150"/>
-                <DataGridTextColumn Header="User" Binding="{Binding User}" Width="100"/>
-                <DataGridTextColumn Header="Drive" Binding="{Binding Drive}" Width="60"/>
-                <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="100"/>
+                <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="130"/>
+                <DataGridTextColumn Header="Host" Binding="{Binding Host}" Width="120"/>
+                <DataGridTextColumn Header="User" Binding="{Binding User}" Width="90"/>
+                <DataGridTextColumn Header="Drive" Binding="{Binding Drive}" Width="55"/>
+                <DataGridTemplateColumn Header="Status" Width="110">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding Status}" Padding="5,0" FontWeight="SemiBold">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Foreground" Value="#D83B01"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding Status}" Value="Connected">
+                                                <Setter Property="Foreground" Value="#107C10"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
                 <DataGridTextColumn Header="Remote Path" Binding="{Binding RemotePath}" Width="*"/>
             </DataGrid.Columns>
         </DataGrid>
 
-        <!-- Action Buttons -->
-        <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,10,0,0">
-            <Button Name="BtnAdd" Content="➕ Add New"/>
-            <Button Name="BtnEdit" Content="✏️ Edit"/>
-            <Button Name="BtnRemove" Content="🗑️ Remove"/>
-            <Button Name="BtnConnect" Content="🔌 Connect"/>
-            <Button Name="BtnDisconnect" Content="⏏️ Disconnect"/>
-            <Button Name="BtnRefresh" Content="🔄 Refresh"/>
-        </StackPanel>
+        <WrapPanel Grid.Row="2" Margin="0,12,0,0">
+            <Button Name="BtnAdd" Content="+ Add"/>
+            <Button Name="BtnRemove" Content="Remove" Background="#C42B1C"/>
+            <Button Name="BtnConnect" Content="Connect" Background="#107C10"/>
+            <Button Name="BtnDisconnect" Content="Disconnect" Background="#5C5C5C"/>
+            <Button Name="BtnRefresh" Content="Refresh"/>
+        </WrapPanel>
 
-        <!-- Status Bar -->
-        <Border Grid.Row="3" Background="#E0E0E0" Padding="5" Margin="0,10,0,0">
-            <TextBlock Name="StatusText" Text="Ready"/>
+        <Border Grid.Row="3" Background="#E5E5E5" Padding="10,6" Margin="0,12,0,0" CornerRadius="3">
+            <Grid>
+                <TextBlock Name="StatusText" Text="Ready"/>
+                <TextBlock HorizontalAlignment="Right" Foreground="#888" Text="Click X to minimize to tray"/>
+            </Grid>
         </Border>
     </Grid>
 </Window>
 "@
 
-# Create and show window
+# Create window
 $reader = [System.Xml.XmlReader]::Create([System.IO.StringReader]::new($xaml))
-$window = [Windows.Markup.XamlReader]::Load($reader)
+$script:window = [Windows.Markup.XamlReader]::Load($reader)
 
 # Get controls
-$connectionGrid = $window.FindName("ConnectionGrid")
-$btnAdd = $window.FindName("BtnAdd")
-$btnEdit = $window.FindName("BtnEdit")
-$btnRemove = $window.FindName("BtnRemove")
-$btnConnect = $window.FindName("BtnConnect")
-$btnDisconnect = $window.FindName("BtnDisconnect")
-$btnRefresh = $window.FindName("BtnRefresh")
-$statusText = $window.FindName("StatusText")
+$script:connectionGrid = $script:window.FindName("ConnectionGrid")
+$btnAdd = $script:window.FindName("BtnAdd")
+$btnRemove = $script:window.FindName("BtnRemove")
+$btnConnect = $script:window.FindName("BtnConnect")
+$btnDisconnect = $script:window.FindName("BtnDisconnect")
+$btnRefresh = $script:window.FindName("BtnRefresh")
+$script:statusText = $script:window.FindName("StatusText")
 
-# Load connections into grid
 function Refresh-ConnectionList {
     $connections = Load-Connections
-    $mounted = Get-MountedDrives
-
     $displayList = @()
-    foreach ($conn in $connections) {
-        $status = "Disconnected"
-        $drive = "$($conn.Drive):"
 
-        if ($mounted.ContainsKey($drive)) {
-            $expectedRemote = "\\sshfs.k\$($conn.User)@$($conn.Host)"
-            if ($mounted[$drive] -like "*$($conn.User)*$($conn.Host)*") {
-                $status = "✅ Connected"
-            }
-        }
+    foreach ($conn in $connections) {
+        $status = Get-ConnectionStatus -HostName $conn.Host -User $conn.User -Drive $conn.Drive
 
         $displayList += [PSCustomObject]@{
             Name = $conn.Name
             Host = $conn.Host
             User = $conn.User
-            Drive = $conn.Drive
+            Drive = "$($conn.Drive):"
             RemotePath = if ($conn.RemotePath) { $conn.RemotePath } else { "(home)" }
             Status = $status
         }
     }
 
-    $connectionGrid.ItemsSource = $displayList
-    $statusText.Text = "Loaded $($connections.Count) connection(s)"
+    $script:connectionGrid.ItemsSource = $displayList
+    $connected = ($displayList | Where-Object { $_.Status -eq "Connected" }).Count
+    $script:statusText.Text = "$($connections.Count) connections - $connected connected"
+    Update-TrayTooltip
 }
 
-# Add New Connection Dialog
+# Add Connection
 $btnAdd.Add_Click({
     $addXaml = @"
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-        Title="Add SSHFS Connection" Height="400" Width="500"
-        WindowStartupLocation="CenterScreen" Background="#F0F0F0">
+        Title="Add Connection" Height="340" Width="420"
+        WindowStartupLocation="CenterOwner" Background="#F5F5F5" ResizeMode="NoResize">
     <Grid Margin="20">
         <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/><RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="100"/><ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
 
-        <Label Grid.Row="0" Content="Connection Name:"/>
-        <TextBox Grid.Row="0" Name="TxtName" Margin="0,25,0,5"/>
+        <TextBlock Grid.Row="0" Text="Name:" VerticalAlignment="Center" Margin="0,8"/>
+        <TextBox Grid.Row="0" Grid.Column="1" Name="TxtName" Margin="0,8" Padding="6,4"/>
 
-        <Label Grid.Row="1" Content="Host (IP or hostname):"/>
-        <TextBox Grid.Row="1" Name="TxtHost" Margin="0,25,0,5"/>
+        <TextBlock Grid.Row="1" Text="Host/IP:" VerticalAlignment="Center" Margin="0,8"/>
+        <TextBox Grid.Row="1" Grid.Column="1" Name="TxtHost" Margin="0,8" Padding="6,4"/>
 
-        <Label Grid.Row="2" Content="Username:"/>
-        <TextBox Grid.Row="2" Name="TxtUser" Margin="0,25,0,5"/>
+        <TextBlock Grid.Row="2" Text="Username:" VerticalAlignment="Center" Margin="0,8"/>
+        <TextBox Grid.Row="2" Grid.Column="1" Name="TxtUser" Margin="0,8" Padding="6,4"/>
 
-        <Label Grid.Row="3" Content="Drive Letter (e.g., X):"/>
-        <TextBox Grid.Row="3" Name="TxtDrive" Margin="0,25,0,5" MaxLength="1"/>
+        <TextBlock Grid.Row="3" Text="Drive:" VerticalAlignment="Center" Margin="0,8"/>
+        <TextBox Grid.Row="3" Grid.Column="1" Name="TxtDrive" Margin="0,8" Padding="6,4" MaxLength="1" Width="50" HorizontalAlignment="Left"/>
 
-        <Label Grid.Row="4" Content="Remote Path (optional, default: home):"/>
-        <TextBox Grid.Row="4" Name="TxtRemotePath" Margin="0,25,0,5"/>
+        <TextBlock Grid.Row="4" Text="Remote Path:" VerticalAlignment="Center" Margin="0,8"/>
+        <TextBox Grid.Row="4" Grid.Column="1" Name="TxtRemotePath" Margin="0,8" Padding="6,4"/>
 
-        <TextBlock Grid.Row="5" Margin="0,10" TextWrapping="Wrap" Foreground="#666">
-            Note: SSH key authentication must be configured. Run install.ps1 first if needed.
+        <TextBlock Grid.Row="5" Grid.ColumnSpan="2" Foreground="#666" FontSize="11" Margin="0,10" TextWrapping="Wrap">
+            Leave Remote Path empty to mount user's home directory.
         </TextBlock>
 
-        <StackPanel Grid.Row="7" Orientation="Horizontal" HorizontalAlignment="Right">
-            <Button Name="BtnSave" Content="💾 Save" IsDefault="True"/>
-            <Button Name="BtnCancel" Content="❌ Cancel" IsCancel="True"/>
+        <StackPanel Grid.Row="6" Grid.ColumnSpan="2" Orientation="Horizontal" HorizontalAlignment="Right">
+            <Button Name="BtnSave" Content="Save" Width="80" Background="#107C10" Foreground="White" Padding="8,4" Margin="4"/>
+            <Button Name="BtnCancel" Content="Cancel" Width="80" Background="#5C5C5C" Foreground="White" Padding="8,4" Margin="4"/>
         </StackPanel>
     </Grid>
 </Window>
@@ -228,6 +388,7 @@ $btnAdd.Add_Click({
 
     $addReader = [System.Xml.XmlReader]::Create([System.IO.StringReader]::new($addXaml))
     $addWindow = [Windows.Markup.XamlReader]::Load($addReader)
+    $addWindow.Owner = $script:window
 
     $txtName = $addWindow.FindName("TxtName")
     $txtHost = $addWindow.FindName("TxtHost")
@@ -239,130 +400,122 @@ $btnAdd.Add_Click({
 
     $btnSave.Add_Click({
         if (-not $txtName.Text -or -not $txtHost.Text -or -not $txtUser.Text -or -not $txtDrive.Text) {
-            [System.Windows.MessageBox]::Show("Please fill in all required fields.", "Validation Error", "OK", "Warning")
+            [System.Windows.MessageBox]::Show("Fill in all required fields.", "Required", "OK", "Warning")
             return
         }
 
-        $connections = Load-Connections
-        $newConn = @{
+        $connections = @(Load-Connections)
+        $connections += @{
             Name = $txtName.Text
             Host = $txtHost.Text
             User = $txtUser.Text
             Drive = $txtDrive.Text.ToUpper()
             RemotePath = $txtRemotePath.Text
         }
-
-        $connections += $newConn
         Save-Connections $connections
-
         $addWindow.Close()
         Refresh-ConnectionList
-        $statusText.Text = "Added connection: $($txtName.Text)"
+        $script:statusText.Text = "Added: $($txtName.Text)"
     })
 
     $btnCancel.Add_Click({ $addWindow.Close() })
-
     $addWindow.ShowDialog()
 })
 
-# Remove Connection
+# Remove
 $btnRemove.Add_Click({
-    $selected = $connectionGrid.SelectedItem
+    $selected = $script:connectionGrid.SelectedItem
     if (-not $selected) {
-        [System.Windows.MessageBox]::Show("Please select a connection to remove.", "No Selection", "OK", "Warning")
+        [System.Windows.MessageBox]::Show("Select a connection first.", "No Selection", "OK", "Warning")
         return
     }
 
-    $result = [System.Windows.MessageBox]::Show(
-        "Remove connection '$($selected.Name)'?",
-        "Confirm Remove",
-        "YesNo",
-        "Question"
-    )
-
+    $result = [System.Windows.MessageBox]::Show("Remove '$($selected.Name)'?", "Confirm", "YesNo", "Question")
     if ($result -eq "Yes") {
-        $connections = Load-Connections
-        $connections = $connections | Where-Object { $_.Name -ne $selected.Name }
-        Save-Connections $connections
+        $connections = @(Load-Connections) | Where-Object { $_.Name -ne $selected.Name }
+        Save-Connections @($connections)
         Refresh-ConnectionList
-        $statusText.Text = "Removed connection: $($selected.Name)"
+        $script:statusText.Text = "Removed: $($selected.Name)"
     }
 })
 
 # Connect
 $btnConnect.Add_Click({
-    $selected = $connectionGrid.SelectedItem
+    $selected = $script:connectionGrid.SelectedItem
     if (-not $selected) {
-        [System.Windows.MessageBox]::Show("Please select a connection to connect.", "No Selection", "OK", "Warning")
+        [System.Windows.MessageBox]::Show("Select a connection first.", "No Selection", "OK", "Warning")
         return
     }
 
-    $statusText.Text = "Testing SSH connection to $($selected.Host)..."
-    $window.Dispatcher.Invoke([Action]{}, [Windows.Threading.DispatcherPriority]::Background)
-
-    $sshTest = Test-SSHConnection -Host $selected.Host -User $selected.User
-    if (-not $sshTest) {
-        [System.Windows.MessageBox]::Show(
-            "SSH connection test failed. Please ensure SSH key authentication is configured.",
-            "Connection Failed",
-            "OK",
-            "Error"
-        )
-        $statusText.Text = "SSH test failed for $($selected.Host)"
+    if ($selected.Status -eq "Connected") {
+        [System.Windows.MessageBox]::Show("Already connected.", "Info", "OK", "Information")
         return
     }
 
-    $statusText.Text = "Mounting $($selected.Drive): ..."
-    $window.Dispatcher.Invoke([Action]{}, [Windows.Threading.DispatcherPriority]::Background)
+    $script:statusText.Text = "Connecting to $($selected.Host)..."
+    $script:window.Dispatcher.Invoke([Action]{}, [Windows.Threading.DispatcherPriority]::Background)
 
+    $hostName = $selected.Host
+    $userName = $selected.User
+    $drive = $selected.Drive.TrimEnd(':')
     $remotePath = if ($selected.RemotePath -eq "(home)") { "" } else { $selected.RemotePath }
-    $success = Mount-SSHFSDrive -Host $selected.Host -User $selected.User -Drive $selected.Drive -RemotePath $remotePath
 
-    if ($success) {
-        $statusText.Text = "Connected: $($selected.Drive): → $($selected.User)@$($selected.Host)"
-    } else {
-        [System.Windows.MessageBox]::Show(
-            "Mount failed. Check logs at $script:LogsPath",
-            "Mount Error",
-            "OK",
-            "Error"
-        )
-        $statusText.Text = "Mount failed for $($selected.Drive):"
+    # Test SSH first
+    $sshOk = Test-SSHConnection -HostName $hostName -User $userName
+    if (-not $sshOk) {
+        [System.Windows.MessageBox]::Show("SSH failed. Check key authentication.", "SSH Error", "OK", "Error")
+        $script:statusText.Text = "SSH failed"
+        return
     }
 
+    Mount-SSHFSDrive -HostName $hostName -User $userName -Drive $drive -RemotePath $remotePath
+    Start-Sleep -Seconds 2
     Refresh-ConnectionList
+
+    $newStatus = Get-ConnectionStatus -HostName $hostName -User $userName -Drive $drive
+    if ($newStatus -eq "Connected") {
+        $script:statusText.Text = "Connected: $($drive):"
+    } else {
+        $script:statusText.Text = "Mount may have failed"
+    }
 })
 
 # Disconnect
 $btnDisconnect.Add_Click({
-    $selected = $connectionGrid.SelectedItem
+    $selected = $script:connectionGrid.SelectedItem
     if (-not $selected) {
-        [System.Windows.MessageBox]::Show("Please select a connection to disconnect.", "No Selection", "OK", "Warning")
+        [System.Windows.MessageBox]::Show("Select a connection first.", "No Selection", "OK", "Warning")
         return
     }
 
-    if ($selected.Status -notlike "*Connected*") {
-        [System.Windows.MessageBox]::Show("This connection is not currently mounted.", "Not Connected", "OK", "Information")
+    if ($selected.Status -ne "Connected") {
+        [System.Windows.MessageBox]::Show("Not connected.", "Info", "OK", "Information")
         return
     }
 
-    $success = Dismount-SSHFSDrive -Drive $selected.Drive
-    if ($success) {
-        $statusText.Text = "Disconnected: $($selected.Drive):"
-    } else {
-        $statusText.Text = "Failed to disconnect $($selected.Drive):"
-    }
-
+    Dismount-SSHFSDrive -Drive $selected.Drive
+    Start-Sleep -Seconds 1
     Refresh-ConnectionList
+    $script:statusText.Text = "Disconnected: $($selected.Drive)"
 })
 
 # Refresh
-$btnRefresh.Add_Click({
-    Refresh-ConnectionList
+$btnRefresh.Add_Click({ Refresh-ConnectionList })
+
+# Minimize to tray on close
+$script:window.Add_Closing({
+    param($sender, $e)
+    $e.Cancel = $true
+    $script:window.Hide()
+    $script:notifyIcon.ShowBalloonTip(1500, "SSHFS Manager", "Running in system tray", [System.Windows.Forms.ToolTipIcon]::Info)
 })
 
-# Initial load
+# Initialize
+Create-TrayIcon
 Refresh-ConnectionList
 
 # Show window
-$window.ShowDialog() | Out-Null
+$script:window.Show()
+
+# Application loop
+[System.Windows.Forms.Application]::Run()
